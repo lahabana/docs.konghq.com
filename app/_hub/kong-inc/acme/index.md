@@ -84,7 +84,7 @@ params:
       default: "`shm`"
       datatype: string
       description: |
-        The backend storage type to use. The possible values are `"kong"`, `"shm"`, `"redis"`, `"consul"`, or `"vault"`. In DB-less mode, `"kong"` storage is unavailable. Note that `"shm"` storage does not persist during Kong restarts and does not work for Kong running on different machines, so consider using one of `"kong"`, `"redis"`, `"consul"`, or `"vault"` in production.
+        The backend storage type to use. The possible values are `"kong"`, `"shm"`, `"redis"`, `"consul"`, or `"vault"`. In DB-less mode, `"kong"` storage is unavailable. Note that `"shm"` storage does not persist during Kong restarts and does not work for Kong running on different machines, so consider using one of `"kong"`, `"redis"`, `"consul"`, or `"vault"` in production. Please refer to Hybrid Mode sections below as well.
     - name: storage_config
       required: false
       default:
@@ -158,6 +158,12 @@ params:
 
 To configure a storage type other than `kong`, refer to [lua-resty-acme](https://github.com/fffonion/lua-resty-acme#storage-adapters).
 
+## Workflow
+
+The following diagram demonstrates the simplified `http-01` challenge workflow between Kong
+and ACME server.
+
+<center><img title="General Workflow" src="/assets/images/docs/acme/general.png"/></center>
 
 ## Using the plugin
 
@@ -166,7 +172,8 @@ To configure a storage type other than `kong`, refer to [lua-resty-acme](https:/
 - Kong needs to listen 80 port or proxied by a load balancer that listens for 80 port.
 - `lua_ssl_trusted_certificate` needs to be set in `kong.conf` to ensure the plugin can properly
 verify Let's Encrypt API. The CA-bundle file is usually `/etc/ssl/certs/ca-certificates.crt` for
-Ubuntu/Debian and `/etc/ssl/certs/ca-bundle.crt` for CentOS/Fedora/RHEL.
+Ubuntu/Debian and `/etc/ssl/certs/ca-bundle.crt` for CentOS/Fedora/RHEL. Starting from Kong 2.2,
+user can set this config to `system` to auto pick CA-bundle from OS.
 
 ### Configure plugin
 
@@ -257,6 +264,38 @@ $ curl http://localhost:8001/acme -d host=mydomain.com -d test_http_challenge_fl
 $ curl https://mydomain.com
 # Now gives you a valid Let's Encrypt certicate
 ```
+
+### Renew certificates
+
+The plugin automatically renews all certificate that are due for renewal everyday. Note the
+renewal config is stored in configured storage backend. If the storage is cleared or modified
+outside of Kong, renewal might not properly.
+
+It's also possible to actively trigger the renewal. The following request
+schedules renewal in background and return immediately.
+
+```bash
+$ curl http://localhost:8001/acme -XPATCH
+```
+
+## Hybrid mode
+
+`"shm"` storage type is not available in Hybrid Mode.
+
+Due to current limitations of Hybrid Mode, `"kong"` storage only supports certificate generation from
+Admin API but not proxy side. The following diagram demonstrates the workflow for `"kong"` storage
+in Hybrid Mode.
+
+<center><img title="Kong Storage" src="/assets/images/docs/acme/kong-storage.png"/></center>
+
+All external storage types works as usual in Hybrid Mode. Do note both Control Plane and Data Planes
+need to connect to the same external storage cluster. It's also a good idea to setup replicas to avoid
+connecting to same node directly for external storage.
+
+The following diagram demonstrates the workflow for external storage in Hybrid Mode.
+
+<center><img title="External Storage" src="/assets/images/docs/acme/external-storage.png"/></center>
+
 
 ## Local testing and development
 
